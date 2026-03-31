@@ -37,7 +37,7 @@ export default {
     },
   },
   paths: {
-    sources: "./contracts",
+    sources: "../contracts/contracts",
     tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",
