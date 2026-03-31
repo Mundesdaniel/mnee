@@ -1,0 +1,71 @@
+image: node:18
+
+pipelines:
+  # Runs on every push to ANY branch
+  default:
+    - step:
+        name: Build Check
+        caches:
+          - node
+        script:
+          - npm install
+          - npm run build
+        artifacts:
+          - dist/**
+
+  # Branch-specific pipelines
+  branches:
+    # Push to develop → auto-deploy to staging
+    develop:
+      - step:
+          name: Build
+          caches:
+            - node
+          script:
+            - npm install
+            - npm run build
+          artifacts:
+            - dist/**
+      - step:
+          name: Deploy to Staging
+          deployment: staging
+          script:
+            - pipe: atlassian/scp-deploy:1.4.0
+              variables:
+                USER: $SERVER_USER
+                SERVER: $STAGING_SERVER
+                REMOTE_PATH: $STAGING_PATH
+                LOCAL_PATH: 'dist/*'
+            - pipe: atlassian/ssh-run:0.8.1
+              variables:
+                SSH_USER: $SERVER_USER
+                SERVER: $STAGING_SERVER
+                COMMAND: 'sudo systemctl reload nginx'
+
+    # Push to main → build, then manual deploy to production
+    main:
+      - step:
+          name: Build
+          caches:
+            - node
+          script:
+            - npm install
+            - npm run build
+          artifacts:
+            - dist/**
+      - step:
+          name: Deploy to Production
+          deployment: production
+          trigger: manual
+          script:
+            - pipe: atlassian/scp-deploy:1.4.0
+              variables:
+                USER: $SERVER_USER
+                SERVER: $PRODUCTION_SERVER
+                REMOTE_PATH: $PRODUCTION_PATH
+                LOCAL_PATH: 'dist/*'
+            - pipe: atlassian/ssh-run:0.8.1
+              variables:
+                SSH_USER: $SERVER_USER
+                SERVER: $PRODUCTION_SERVER
+                COMMAND: 'sudo systemctl reload nginx'
