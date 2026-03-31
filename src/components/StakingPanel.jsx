@@ -10,13 +10,15 @@ export default function StakingPanel() {
     const [stakeAmount, setStakeAmount] = useState('');
     const [withdrawAmount, setWithdrawAmount] = useState('');
 
+    const isContractDeployed = MNEEStakingAddress !== "0x0000000000000000000000000000000000000000";
+
     // --- Contract Reads ---
     const { data: stakedBalance, refetch: refetchStakedBalance } = useReadContract({
         address: MNEEStakingAddress,
         abi: MNEEStakingABI,
         functionName: 'staked',
         args: [address],
-        enabled: !!address && MNEEStakingAddress !== "0x0000000000000000000000000000000000000000",
+        query: { enabled: !!address && isContractDeployed },
     });
 
     const { data: earnedRewards, refetch: refetchEarned } = useReadContract({
@@ -24,7 +26,7 @@ export default function StakingPanel() {
         abi: MNEEStakingABI,
         functionName: 'earned',
         args: [address],
-        enabled: !!address && MNEEStakingAddress !== "0x0000000000000000000000000000000000000000",
+        query: { enabled: !!address && isContractDeployed },
     });
 
     const { data: tokenBalance, refetch: refetchTokenBalance } = useReadContract({
@@ -32,7 +34,7 @@ export default function StakingPanel() {
         abi: ERC20ABI,
         functionName: 'balanceOf',
         args: [address],
-        enabled: !!address,
+        query: { enabled: !!address },
     });
 
     const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -40,7 +42,7 @@ export default function StakingPanel() {
         abi: ERC20ABI,
         functionName: 'allowance',
         args: [address, MNEEStakingAddress],
-        enabled: !!address && MNEEStakingAddress !== "0x0000000000000000000000000000000000000000",
+        query: { enabled: !!address && isContractDeployed },
     });
     
     // --- Contract Writes ---
@@ -82,12 +84,10 @@ export default function StakingPanel() {
             refetchEarned();
             refetchTokenBalance();
         }
-    }, [isConfirmedApproval, isConfirmedStake, isConfirmedWithdraw, isConfirmedClaim]);
+    }, [isConfirmedApproval, isConfirmedStake, isConfirmedWithdraw, isConfirmedClaim, refetchAllowance, refetchStakedBalance, refetchEarned, refetchTokenBalance]);
 
     const needsApproval = allowance !== undefined && stakeAmount && allowance < parseEther(stakeAmount || '0');
     const isProcessing = isApproving || isConfirmingApproval || isStaking || isConfirmingStake || isWithdrawing || isConfirmingWithdraw || isClaiming || isConfirmingClaim;
-
-    const isContractDeployed = MNEEStakingAddress !== "0x0000000000000000000000000000000000000000";
 
     if (!isContractDeployed) {
         return (

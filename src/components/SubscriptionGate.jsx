@@ -8,20 +8,22 @@ import { useEffect } from 'react';
 export default function SubscriptionGate({ children }) {
     const { address } = useAccount();
 
+    const isContractDeployed = MNEESubscriptionAddress !== "0x0000000000000000000000000000000000000000";
+
     // Read subscription data
     const { data: hasAccess, refetch: refetchAccess } = useReadContract({
         address: MNEESubscriptionAddress,
         abi: MNEESubscriptionABI,
         functionName: 'hasAccess',
         args: [address],
-        enabled: !!address && MNEESubscriptionAddress !== "0x0000000000000000000000000000000000000000",
+        query: { enabled: !!address && isContractDeployed },
     });
 
     const { data: subscriptionPrice } = useReadContract({
         address: MNEESubscriptionAddress,
         abi: MNEESubscriptionABI,
         functionName: 'price',
-        enabled: MNEESubscriptionAddress !== "0x0000000000000000000000000000000000000000",
+        query: { enabled: isContractDeployed },
     });
 
     const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -29,7 +31,7 @@ export default function SubscriptionGate({ children }) {
         abi: ERC20ABI,
         functionName: 'allowance',
         args: [address, MNEESubscriptionAddress],
-        enabled: !!address && MNEESubscriptionAddress !== "0x0000000000000000000000000000000000000000",
+        query: { enabled: !!address && isContractDeployed },
     });
 
     const { data: tokenBalance } = useReadContract({
@@ -37,7 +39,7 @@ export default function SubscriptionGate({ children }) {
         abi: ERC20ABI,
         functionName: 'balanceOf',
         args: [address],
-        enabled: !!address,
+        query: { enabled: !!address },
     });
 
     // Write functions
@@ -58,11 +60,10 @@ export default function SubscriptionGate({ children }) {
         if (isConfirmedSubscribe) {
             refetchAccess();
         }
-    }, [isConfirmedApproval, isConfirmedSubscribe]);
+    }, [isConfirmedApproval, isConfirmedSubscribe, refetchAllowance, refetchAccess]);
 
     const needsApproval = allowance !== undefined && subscriptionPrice && allowance < subscriptionPrice;
     const isProcessing = isApproving || isConfirmingApproval || isSubscribing || isConfirmingSubscribe;
-    const isContractDeployed = MNEESubscriptionAddress !== "0x0000000000000000000000000000000000000000";
 
     if (!address) {
         return (
