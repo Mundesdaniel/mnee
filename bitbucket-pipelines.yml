@@ -1,71 +1,76 @@
-image: node:18
+# Docker image used for all pipeline steps (Node.js version 20)
+image: node:20
 
 pipelines:
-  # Runs on every push to ANY branch
+
+  # DEFAULT: runs on every push to ANY branch (feature branches, bugfixes, etc.)
+  # This is just a quick check to make sure the code builds without errors
   default:
     - step:
         name: Build Check
         caches:
-          - node
+          - node  # Saves node_modules between runs so npm doesn't reinstall everything each time
         script:
-          - npm install
-          - npm run build
+          - npm ci        # Installs packages (faster and stricter than npm install)
+          - npm run build # Builds the app to check for errors
         artifacts:
-          - dist/**
+          - dist/**  # Saves the dist/ folder (the built files) for later steps if needed
 
-  # Branch-specific pipelines
+  # BRANCH-SPECIFIC: different branches trigger different actions
   branches:
-    # Push to develop → auto-deploy to staging
+
+    # DEVELOP BRANCH: auto-deploys to your staging VPS when you push to develop
     develop:
       - step:
           name: Build
           caches:
             - node
           script:
-            - npm install
+            - npm ci
             - npm run build
           artifacts:
             - dist/**
+
       - step:
           name: Deploy to Staging
-          deployment: staging
+          deployment: staging  # Links this step to the "staging" environment in Bitbucket
           script:
+            # Copies the built files from dist/ to your staging server via SCP (secure copy)
             - pipe: atlassian/scp-deploy:1.4.0
               variables:
-                USER: $SERVER_USER
-                SERVER: $STAGING_SERVER
-                REMOTE_PATH: $STAGING_PATH
-                LOCAL_PATH: 'dist/*'
+                USER: $SERVER_USER          # SSH username (from repository variables)
+                SERVER: $STAGING_SERVER      # Staging server IP (from repository variables)
+                REMOTE_PATH: $STAGING_PATH  # Folder on the server where files go
+                LOCAL_PATH: 'dist/*'        # The built files to upload
+
+            # After copying files, SSH into the server and restart nginx to serve the new files
             - pipe: atlassian/ssh-run:0.8.1
               variables:
                 SSH_USER: $SERVER_USER
                 SERVER: $STAGING_SERVER
-                COMMAND: 'sudo systemctl reload nginx'
+                COMMAND: 'sudo systemctl reload nginx'  # Tells nginx to load the new files
 
-    # Push to main → build, then manual deploy to production
+    # MAIN BRANCH: builds and deploys to Azure (production)
     main:
       - step:
           name: Build
           caches:
             - node
           script:
-            - npm install
+            - npm ci
             - npm run build
+            # Azure needs a zip file, not loose files
+            - apt-get update && apt-get install -y zip  # Installs the zip tool
+            - cd dist && zip -r ../deploy.zip . && cd .. # Zips everything in dist/ into deploy.zip
           artifacts:
-            - dist/**
+            - deploy.zip  # Passes the zip file to the next step
+
       - step:
-          name: Deploy to Production
-          deployment: production
-          trigger: manual
+          name: Deploy to Azure
           script:
-            - pipe: atlassian/scp-deploy:1.4.0
+            # Uses Microsoft's official pipe to deploy the zip to Azure Web App
+            - pipe: microsoft/azure-web-apps-deploy:1.0.3
               variables:
-                USER: $SERVER_USER
-                SERVER: $PRODUCTION_SERVER
-                REMOTE_PATH: $PRODUCTION_PATH
-                LOCAL_PATH: 'dist/*'
-            - pipe: atlassian/ssh-run:0.8.1
-              variables:
-                SSH_USER: $SERVER_USER
-                SERVER: $PRODUCTION_SERVER
-                COMMAND: 'sudo systemctl reload nginx'
+                AZURE_APP_NAME: "mnee-app"  # Your app name on Azure
+                AZURE_PUBLISH_PROFILE: $AZURE_WEBAPP_PUBLISH_PROFILE  # The secret key from Azure (from repository variables)
+                ZIP_FILE: "deploy.zip"  # The zip file to upload
